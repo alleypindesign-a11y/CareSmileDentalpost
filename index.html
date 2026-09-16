@@ -4,17 +4,19 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>凱星牙醫｜休診公告產生器</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@500;700;900&display=swap" rel="stylesheet">
-<link href="https://font.emtech.cc/css/GenSenRoundedTW" rel="stylesheet">
+<link rel="stylesheet" href="https://font.emtech.cc/css/GenSenRoundedTW/400" media="print" onload="this.media='all'">
+<link rel="stylesheet" href="https://font.emtech.cc/css/GenSenRoundedTW/700" media="print" onload="this.media='all'">
+<noscript>
+<link rel="stylesheet" href="https://font.emtech.cc/css/GenSenRoundedTW/400">
+<link rel="stylesheet" href="https://font.emtech.cc/css/GenSenRoundedTW/700">
+</noscript>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
   --accent: #2F4982;   /* 凱星牙醫標題「凱星牙醫」的藍 */
-  --gold:   #D1AE76;   /* 凱星牙醫標題「休診公告」的金黃 */
-  --gold-hover: #BE9A5F;
+  --gold:   #D1A669;   /* 下載按鈕金黃 */
+  --gold-hover: #BC9459;
   --title:  #2F4982;
   --text:   #33476E;
   --muted:  #8892A8;
@@ -190,7 +192,7 @@ input[type="date"]:focus { border-color: var(--accent); }
   font-weight: 700;
   padding: 11px 0;
   background: var(--gold);
-  color: var(--accent);
+  color: #fff;
   border: none;
   border-radius: 8px;
   cursor: pointer;
@@ -323,7 +325,7 @@ textarea.custom-line:focus { border-color: var(--accent); }
   font-weight: 700;
   padding: 11px 0;
   background: var(--gold);
-  color: var(--accent);
+  color: #fff;
   border: none;
   border-radius: 8px;
   cursor: pointer;
@@ -453,7 +455,7 @@ textarea.custom-line:focus { border-color: var(--accent); }
     </div>
 
     <div class="divider"></div>
-    <button class="dl-btn dl-btn-side" id="dl-btn" onclick="downloadPNG()">↓ 下載 PNG</button>
+    <button class="dl-btn dl-btn-side" id="dl-btn" onclick="downloadPNG()">↓ 下載圖片</button>
 
   </aside>
 
@@ -484,7 +486,7 @@ textarea.custom-line:focus { border-color: var(--accent); }
       </div>
     </div>
     <footer class="copyright">AlleyPin | Design</footer>
-    <button class="dl-btn-below" id="dl-btn-below" onclick="downloadPNG()">↓ 下載 PNG</button>
+    <button class="dl-btn-below" id="dl-btn-below" onclick="downloadPNG()">↓ 下載圖片</button>
     </div><!-- /canvas-wrap -->
   </main>
 
@@ -683,50 +685,29 @@ function switchTab(name) {
 }
 
 /* ──────────────────────────────────────────────
-   PNG DPI injection
+   JPEG DPI injection (sets the JFIF density fields)
 ────────────────────────────────────────────── */
-const _crcTable = (() => {
-  const t = new Uint32Array(256);
-  for (let i = 0; i < 256; i++) {
-    let c = i;
-    for (let j = 0; j < 8; j++) c = (c & 1) ? 0xEDB88320 ^ (c >>> 1) : c >>> 1;
-    t[i] = c;
-  }
-  return t;
-})();
-
-function _crc32(buf, start, len) {
-  let c = 0xFFFFFFFF;
-  for (let i = start; i < start + len; i++) c = _crcTable[(c ^ buf[i]) & 0xFF] ^ (c >>> 8);
-  return (c ^ 0xFFFFFFFF) >>> 0;
-}
-
-function injectDPI(pngBlob, dpi) {
+function injectDPI(jpegBlob, dpi) {
   return new Promise(resolve => {
     const reader = new FileReader();
     reader.onload = e => {
-      const orig = new Uint8Array(e.target.result);
-      const ppm  = Math.round(dpi / 0.0254);
-      const phys = new Uint8Array(21);
-      const dv   = new DataView(phys.buffer);
-      dv.setUint32(0, 9);
-      phys.set([0x70,0x48,0x59,0x73], 4);
-      dv.setUint32(8,  ppm);
-      dv.setUint32(12, ppm);
-      phys[16] = 1;
-      dv.setUint32(17, _crc32(phys, 4, 13));
-      const out = new Uint8Array(orig.length + 21);
-      out.set(orig.slice(0, 33));
-      out.set(phys, 33);
-      out.set(orig.slice(33), 54);
-      resolve(new Blob([out], { type: 'image/png' }));
+      const bytes = new Uint8Array(e.target.result);
+      // Canvas-emitted JPEGs start with FFD8 FFE0 (JFIF APP0) as the first segment
+      if (bytes[2] === 0xFF && bytes[3] === 0xE0) {
+        bytes[13] = 1; // density units = dots per inch
+        bytes[14] = (dpi >> 8) & 0xFF;
+        bytes[15] = dpi & 0xFF;
+        bytes[16] = (dpi >> 8) & 0xFF;
+        bytes[17] = dpi & 0xFF;
+      }
+      resolve(new Blob([bytes], { type: 'image/jpeg' }));
     };
-    reader.readAsArrayBuffer(pngBlob);
+    reader.readAsArrayBuffer(jpegBlob);
   });
 }
 
 /* ──────────────────────────────────────────────
-   Download PNG
+   Download image (JPEG)
 ────────────────────────────────────────────── */
 function setDlBtns(text, disabled) {
   [$('dl-btn'), $('dl-btn-below')].forEach(b => { if (b) { b.textContent = text; b.disabled = disabled; } });
@@ -821,7 +802,7 @@ async function downloadPNG() {
       ? $('date-rows')?.querySelector('input[type="date"]')?.value
       : val('B-start');
     const dateStr  = firstDate ? firstDate.replace(/-/g,'') : '日期';
-    const filename = `凱星-${dateStr}-休診公告.png`;
+    const filename = `凱星-${dateStr}-休診公告.jpg`;
 
     await new Promise(res => oc.toBlob(async rawBlob => {
       const dpiBlob = await injectDPI(rawBlob, 150);
@@ -831,13 +812,13 @@ async function downloadPNG() {
       a.click();
       setTimeout(() => URL.revokeObjectURL(a.href), 1000);
       res();
-    }, 'image/png'));
+    }, 'image/jpeg', 0.9));
 
   } catch (err) {
     console.error(err);
     alert('下載失敗：' + err.message);
   } finally {
-    setDlBtns('↓ 下載 PNG', false);
+    setDlBtns('↓ 下載圖片', false);
   }
 }
 
